@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import Skeleton from '../components/ui/Skeleton';
 
 type PositionedBox = {
@@ -18,6 +18,26 @@ type ResultCard = {
   rows: number;
   tint?: string;
 };
+
+type UnsplashPhoto = {
+  id: string;
+  width: number;
+  height: number;
+  alt_description: string | null;
+  description: string | null;
+  urls: {
+    regular?: string;
+    small?: string;
+  };
+};
+
+type SearchPhotosResponse = {
+  results?: UnsplashPhoto[];
+  errors?: string[];
+};
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api').replace(/\/$/, '');
+const SEARCH_PAGE_SIZE = 16;
 
 const leftDecorations: PositionedBox[] = [
   { top: '10%', left: '-8%' },
@@ -134,6 +154,60 @@ function HomePage() {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [showResults, setShowResults] = useState(false);
+  const [results, setResults] = useState<UnsplashPhoto[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (!showResults || !submittedQuery) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function searchPhotos() {
+      setIsLoading(true);
+      setErrorMessage('');
+
+      try {
+        const params = new URLSearchParams({
+          query: submittedQuery,
+          perPage: String(SEARCH_PAGE_SIZE),
+        });
+
+        const response = await fetch(`${API_BASE_URL}/unsplash/search/photos?${params.toString()}`, {
+          signal: controller.signal,
+        });
+
+        const payload = (await response.json()) as SearchPhotosResponse;
+
+        if (!response.ok) {
+          const serverError =
+            payload.errors && payload.errors.length > 0
+              ? payload.errors.join(', ')
+              : 'Search request failed. Please try again.';
+          throw new Error(serverError);
+        }
+
+        setResults(payload.results ?? []);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
+
+        setResults([]);
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to load images.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    void searchPhotos();
+
+    return () => {
+      controller.abort();
+    };
+  }, [showResults, submittedQuery]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -142,11 +216,26 @@ function HomePage() {
     if (!trimmed) {
       setShowResults(false);
       setSubmittedQuery('');
+      setResults([]);
+      setErrorMessage('');
       return;
     }
 
     setShowResults(true);
     setSubmittedQuery(trimmed);
+  };
+
+  const getCardRowSpan = (photo: UnsplashPhoto) => {
+    if (!photo.width || !photo.height) {
+      return 3;
+    }
+
+    const ratio = photo.height / photo.width;
+
+    if (ratio >= 1.5) return 5;
+    if (ratio >= 1.2) return 4;
+    if (ratio >= 0.9) return 3;
+    return 2;
   };
 
   return (
@@ -236,22 +325,54 @@ function HomePage() {
             </form>
 
             <div className="pt-8 mt-6 grid auto-rows-[90px] grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {resultCards.map((card, index) => (
-                <div
-                  key={`${card.alt ?? 'placeholder'}-${index}`}
-                  className="overflow-hidden rounded-md bg-slate-200"
-                  style={{
-                    gridRow: `span ${card.rows} / span ${card.rows}`,
-                    backgroundColor: card.tint ?? undefined,
-                  }}
-                >
-                  {card.src ? (
-                    <img src={card.src} alt={card.alt} className="h-full w-full object-cover" />
-                  ) : (
+              {isLoading &&
+                resultCards.map((card, index) => (
+                  <div
+                    key={`loading-${index}`}
+                    className="overflow-hidden rounded-md bg-slate-200"
+                    style={{
+                      gridRow: `span ${card.rows} / span ${card.rows}`,
+                      backgroundColor: card.tint ?? undefined,
+                    }}
+                  >
                     <Skeleton className="h-full w-full rounded-none" />
-                  )}
+                  </div>
+                ))}
+
+              {!isLoading && errorMessage && (
+                <div className="col-span-full rounded-md border border-rose-200 bg-rose-50 p-4 text-rose-700">
+                  {errorMessage}
                 </div>
-              ))}
+              )}
+
+              {!isLoading && !errorMessage && results.length === 0 && (
+                <div className="col-span-full rounded-md border border-slate-200 bg-white p-4 text-slate-600">
+                  No images found for "{submittedQuery}".
+                </div>
+              )}
+
+              {!isLoading &&
+                !errorMessage &&
+                results.map((photo) => {
+                  const rows = getCardRowSpan(photo);
+                  const imageAlt =
+                    photo.alt_description?.trim() || photo.description?.trim() || `Unsplash image ${photo.id}`;
+                  const imageSrc = photo.urls.regular ?? photo.urls.small;
+
+                  if (!imageSrc) {
+                    return null;
+                  }
+
+                  return (
+                    <div
+                      key={photo.id}
+                      className="overflow-hidden rounded-md bg-slate-200"
+                      style={{ gridRow: `span ${rows} / span ${rows}` }}
+                    >
+                      <img src={imageSrc} alt={imageAlt} className="h-full w-full object-cover" loading="lazy" />
+                    </div>
+                  );
+                })}
             </div>
           </div>
         </>
