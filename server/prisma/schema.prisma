@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Collection {
+  id          String            @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  images      CollectionImage[]
+
+  @@map("collections")
+}
+
+model Image {
+  id               String            @id @default(cuid())
+  unsplashId       String            @unique
+  slug             String?
+  description      String?
+  altDescription   String?
+
+  rawUrl           String?
+  fullUrl          String?
+  regularUrl       String?
+  smallUrl         String?
+  thumbUrl         String?
+
+  width            Int?
+  height           Int?
+  color            String?
+
+  authorName       String
+  authorUsername   String?
+  authorProfileUrl String?
+  unsplashPageUrl  String?
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  collections      CollectionImage[]
+
+  @@index([authorUsername])
+  @@map("images")
+}
+
+model CollectionImage {
+  id           String     @id @default(cuid())
+  collectionId String
+  imageId      String
+  addedAt      DateTime   @default(now())
+
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  image        Image      @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, imageId])
+  @@index([collectionId])
+  @@index([imageId])
+  @@map("collection_images")
+}
