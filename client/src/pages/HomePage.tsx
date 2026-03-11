@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import Skeleton from '../components/ui/Skeleton';
 
 type PositionedBox = {
@@ -364,13 +365,14 @@ function HomePage() {
                   }
 
                   return (
-                    <div
+                    <Link
                       key={photo.id}
-                      className="overflow-hidden rounded-md bg-slate-200"
+                      to={`/image/${photo.id}`}
+                      className="overflow-hidden rounded-md bg-slate-200 transition-transform duration-200 hover:scale-[1.01]"
                       style={{ gridRow: `span ${rows} / span ${rows}` }}
                     >
                       <img src={imageSrc} alt={imageAlt} className="h-full w-full object-cover" loading="lazy" />
-                    </div>
+                    </Link>
                   );
                 })}
             </div>
